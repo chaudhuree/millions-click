@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lizard Clicker</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    button { font-size: 30px; cursor: pointer; padding: 10px 20px; }
+    .stat { font-size: 18px; margin: 10px 0; }
+    .row { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; min-width: 240px; }
+    .muted { color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Click the Lizard!</h1>
+  <button id="lizardButton">🦎 Click Me!</button>
+
+  <div class="row" style="margin-top: 24px;">
+    <div class="card">
+      <div class="stat">Your clicks (local): <strong><span id="localClicks">0</span></strong></div>
+      <div class="muted">Stored in your browser (localStorage)</div>
+    </div>
+    <div class="card">
+      <div class="stat">Global clicks (server): <strong><span id="globalClicks">0</span></strong></div>
+      <div class="muted">Fetched from the database via API</div>
+    </div>
+  </div>
+
+  <div class="muted" style="margin-top: 12px;">
+    Global count auto-refreshes every 15s and after each click.
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:3000'; // Server origin
+    const button = document.getElementById('lizardButton');
+    const localDisplay = document.getElementById('localClicks');
+    const globalDisplay = document.getElementById('globalClicks');
+
+    // Local storage helpers
+    const LOCAL_KEY = 'lizard_local_clicks';
+    function getLocalClicks() {
+      const v = localStorage.getItem(LOCAL_KEY);
+      return v ? parseInt(v, 10) : 0;
+    }
+    function setLocalClicks(val) {
+      localStorage.setItem(LOCAL_KEY, String(val));
+    }
+
+    // UI update helpers
+    function renderLocal(val) { localDisplay.textContent = val; }
+    function renderGlobal(val) { globalDisplay.textContent = val; }
+
+    // Fetch global count from server
+    async function fetchGlobal() {
+      try {
+        const res = await fetch(`${API_BASE}/clicks`);
+        if (!res.ok) throw new Error('Failed to fetch /clicks');
+        const data = await res.json();
+        renderGlobal(data.totalClicks ?? 0);
+      } catch (err) {
+        console.warn('Failed to fetch global clicks:', err);
+      }
+    }
+
+    // Send click to server and update global from response
+    async function sendClick() {
+      try {
+        const res = await fetch(`${API_BASE}/click`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to POST /click');
+        const data = await res.json();
+        if (typeof data.totalClicks === 'number') {
+          renderGlobal(data.totalClicks);
+        } else {
+          // Fallback fetch if response didn't include total
+          await fetchGlobal();
+        }
+      } catch (err) {
+        console.warn('Failed to send click:', err);
+      }
+    }
+
+    // Initialize local and global displays
+    const initialLocal = getLocalClicks();
+    renderLocal(initialLocal);
+    fetchGlobal();
+
+    // Button click handler: update local immediately, then notify server
+    button.addEventListener('click', async () => {
+      const newLocal = getLocalClicks() + 1;
+      setLocalClicks(newLocal);
+      renderLocal(newLocal); // immediate UX feedback
+      // fire-and-forget server update, then refresh global
+      await sendClick();
+    });
+
+    // Periodically refresh global count from server
+    setInterval(fetchGlobal, 15000);
+  </script>
+</body>
+</html>
